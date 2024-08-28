@@ -104,10 +104,8 @@ def get_data(symbol, start_date, end_date):
     data['cci'] = ta.trend.cci(data['high'], data['low'], data['close'])
     data['adx'] = ta.trend.adx(data['high'], data['low'], data['close'])
 
-    # Add sentiment data (you would need to implement a proper sentiment analysis here)
     data['sentiment'] = np.random.randn(len(data))
 
-    # Market data (you would need to fetch actual market data)
     market_data = yf.download('^GSPC', start=start_date, end=end_date, interval='1m')
     data['market_returns'] = market_data['Close'].pct_change().reindex(data.index).fillna(0)
 
