@@ -108,6 +108,7 @@ def get_data(symbol, start_date, end_date):
     data['sentiment'] = np.random.randn(len(data))
 
     # Fetch market data using SPY as sp500 proxy
+    # FIXME: use DXY for usd proxy?
     market_request_params = StockBarsRequest(
         symbol_or_symbols="SPY",
         timeframe=TimeFrame.Minute,
