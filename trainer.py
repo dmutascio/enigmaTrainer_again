@@ -13,11 +13,11 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 import ta
 from sklearn.preprocessing import StandardScaler
 from datetime import datetime, timedelta
-import yfinance as yf
 from torch.multiprocessing import Pool, cpu_count
 from functools import partial
 import dotenv
 import os
+import multiprocessing
 from tqdm import tqdm
 
 
@@ -78,6 +78,7 @@ class StockDataset(Dataset):
 
 # Function to get and preprocess data
 def get_data(symbol, start_date, end_date):
+
     # Fetch data
     request_params = StockBarsRequest(
         symbol_or_symbols=symbol,
@@ -107,9 +108,16 @@ def get_data(symbol, start_date, end_date):
     # Add sentiment data (you would need to implement a proper sentiment analysis here)
     data['sentiment'] = np.random.randn(len(data))
 
-    # Market data (you would need to fetch actual market data)
-    market_data = yf.download('^GSPC', start=start_date, end=end_date, interval='1m')
-    data['market_returns'] = market_data['Close'].pct_change().reindex(data.index).fillna(0)
+    # Fetch market data using SPY as sp500 proxy
+    market_request_params = StockBarsRequest(
+        symbol_or_symbols="SPY",
+        timeframe=TimeFrame.Minute,
+        start=start_date,
+        end=end_date
+    )
+    market_bars = stock_client.get_stock_bars(market_request_params)
+    market_data = market_bars.df.reset_index().set_index('timestamp')
+    data['market_returns'] = market_data['close'].pct_change().reindex(data.index).fillna(0)
 
     # Drop NaN values
     data = data.dropna()
@@ -128,7 +136,8 @@ def get_data(symbol, start_date, end_date):
 # Training function
 def train_model(X, y, seq_length, model_params, lr, num_epochs, model_type='lstm'):
     dataset = StockDataset(np.column_stack((y.reshape(-1, 1), X)), seq_length)
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=0)
+    # dataloader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=4)
 
     if model_type == 'lstm':
         model = LSTMModel(X.shape[1] + 1, **model_params)
@@ -230,7 +239,10 @@ def process_stock(symbol, start_date, end_date, seq_length, lstm_params, transfo
 
 # Main execution
 if __name__ == "__main__":
-    symbols = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META']  # Example stocks
+
+    #symbols = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META']  # Stocks
+    symbols = ['AAPL']  # Stocks TESTING
+
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365)  # Use one year of data
 
