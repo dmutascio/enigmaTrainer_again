@@ -105,7 +105,6 @@ def get_data(symbol, start_date, end_date):
     data['cci'] = ta.trend.cci(data['high'], data['low'], data['close'])
     data['adx'] = ta.trend.adx(data['high'], data['low'], data['close'])
 
-    # Add sentiment data (you would need to implement a proper sentiment analysis here)
     data['sentiment'] = np.random.randn(len(data))
 
     # Fetch market data using SPY as sp500 proxy
