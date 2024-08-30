@@ -10,7 +10,7 @@ from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
-import ta
+from ta import trend, momentum, volatility, volume
 from sklearn.preprocessing import StandardScaler
 from datetime import datetime, timedelta
 from torch.multiprocessing import Pool, cpu_count
@@ -84,7 +84,7 @@ def get_data(symbol, start_date, end_date):
     # Fetch data
     request_params = StockBarsRequest(
         symbol_or_symbols=symbol,
-        timeframe=TimeFrame.Minute,
+        timeframe=TimeFrame.Minute, # type: ignore
         start=start_date,
         end=end_date
     )
@@ -95,7 +95,7 @@ def get_data(symbol, start_date, end_date):
         pbar.update(1)
 
     # Convert to DataFrame
-    data = bars.df.reset_index()
+    data = bars.df.reset_index() # type: ignore
     data = data.set_index('timestamp')
 
     # Create features and show loader
@@ -107,29 +107,29 @@ def get_data(symbol, start_date, end_date):
             case 'log_returns':
                 data['log_returns'] = np.log(data['close'] / data['close'].shift(1))
             case 'ma_10':
-                data['ma_10'] = ta.trend.sma_indicator(data['close'], window=10)
+                data['ma_10'] = trend.sma_indicator(data['close'], window=10)
             case 'ma_30':
-                data['ma_30'] = ta.trend.sma_indicator(data['close'], window=30)
+                data['ma_30'] = trend.sma_indicator(data['close'], window=30)
             case 'rsi':
-                data['rsi'] = ta.momentum.rsi(data['close'], window=14)
+                data['rsi'] = momentum.rsi(data['close'], window=14)
             case 'bb_high':
-                data['bb_high'] = ta.volatility.bollinger_hband(data['close'])
+                data['bb_high'] = volatility.bollinger_hband(data['close'])
             case 'bb_mid':
-                data['bb_mid'] = ta.volatility.bollinger_mavg(data['close'])
+                data['bb_mid'] = volatility.bollinger_mavg(data['close'])
             case 'bb_low':
-                data['bb_low'] = ta.volatility.bollinger_lband(data['close'])
+                data['bb_low'] = volatility.bollinger_lband(data['close'])
             case 'macd':
-                data['macd'] = ta.trend.macd_diff(data['close'])
+                data['macd'] = trend.macd_diff(data['close'])
             case 'atr':
-                data['atr'] = ta.volatility.average_true_range(data['high'], data['low'], data['close'])
+                data['atr'] = volatility.average_true_range(data['high'], data['low'], data['close'])
             case 'volume':
                 pass  # Volume is already in the data
             case 'obv':
-                data['obv'] = ta.volume.on_balance_volume(data['close'], data['volume'])
+                data['obv'] = volume.on_balance_volume(data['close'], data['volume'])
             case 'cci':
-                data['cci'] = ta.trend.cci(data['high'], data['low'], data['close'])
+                data['cci'] = trend.cci(data['high'], data['low'], data['close'])
             case 'adx':
-                data['adx'] = ta.trend.adx(data['high'], data['low'], data['close'])
+                data['adx'] = trend.adx(data['high'], data['low'], data['close'])
             case 'sentiment':
                 data['sentiment'] = np.random.randn(len(data))
 
@@ -138,14 +138,14 @@ def get_data(symbol, start_date, end_date):
     # FIXME: use DXY for usd proxy?
     market_request_params = StockBarsRequest(
         symbol_or_symbols="SPY",
-        timeframe=TimeFrame.Minute,
+        timeframe=TimeFrame.Minute, # type: ignore
         start=start_date,
         end=end_date
     )
     with tqdm(total=1, desc=f'[{datetime.now().strftime("%H:%M:%S")}] Fetching market data {symbol}') as pbar:
         market_bars = stock_client.get_stock_bars(market_request_params)
         pbar.update(1)
-    market_data = market_bars.df.reset_index().set_index('timestamp')
+    market_data = market_bars.df.reset_index().set_index('timestamp') # type: ignore
     data['market_returns'] = market_data['close'].pct_change().reindex(data.index).fillna(0)
 
     # Drop NaN values
@@ -283,7 +283,7 @@ def process_stock(symbol, start_date, end_date, seq_length, lstm_params, transfo
     save_model(lstm_model, 'lstm', symbol)
     save_model(transformer_model, 'transformer', symbol)
 
-    returns = trade(lstm_model, np.column_stack((y.reshape(-1, 1), X)), scaler, symbol)
+    returns = trade(lstm_model, np.column_stack((y.reshape(-1, 1), X)), scaler, symbol) # type: ignore
 
     total_return = returns[-1]
     sharpe_ratio = np.mean(returns) / np.std(returns) * np.sqrt(252)
