@@ -20,6 +20,8 @@ import os
 import multiprocessing
 from tqdm import tqdm
 
+import sys
+
 
 # Alpaca API setup
 dotenv.load_dotenv()
@@ -86,35 +88,62 @@ def get_data(symbol, start_date, end_date):
         start=start_date,
         end=end_date
     )
-    bars = stock_client.get_stock_bars(request_params)
+
+    # Show loader
+    with tqdm(total=1, desc=f'[{datetime.now().strftime("%H:%M:%S")}] Fetching market data {symbol}') as pbar:
+        bars = stock_client.get_stock_bars(request_params)
+        pbar.update(1)
 
     # Convert to DataFrame
     data = bars.df.reset_index()
     data = data.set_index('timestamp')
 
-    # Calculate features
-    data['returns'] = data['close'].pct_change()
-    data['log_returns'] = np.log(data['close'] / data['close'].shift(1))
-    data['ma_10'] = ta.trend.sma_indicator(data['close'], window=10)
-    data['ma_30'] = ta.trend.sma_indicator(data['close'], window=30)
-    data['rsi'] = ta.momentum.rsi(data['close'], window=14)
-    data['bb_high'], data['bb_mid'], data['bb_low'] = ta.volatility.bollinger_hband(data['close']), ta.volatility.bollinger_mavg(data['close']), ta.volatility.bollinger_lband(data['close'])
-    data['macd'] = ta.trend.macd_diff(data['close'])
-    data['atr'] = ta.volatility.average_true_range(data['high'], data['low'], data['close'])
-    data['obv'] = ta.volume.on_balance_volume(data['close'], data['volume'])
-    data['cci'] = ta.trend.cci(data['high'], data['low'], data['close'])
-    data['adx'] = ta.trend.adx(data['high'], data['low'], data['close'])
-
-    data['sentiment'] = np.random.randn(len(data))
+    # Create features and show loader
+    features = ['returns', 'log_returns', 'ma_10', 'ma_30', 'rsi', 'bb_high', 'bb_mid', 'bb_low', 'macd', 'atr', 'volume', 'obv', 'cci', 'adx', 'sentiment', 'market_returns']
+    for feature in tqdm(features, desc=f'[{datetime.now().strftime("%H:%M:%S")}] Calculating features for {symbol}'):
+        match feature:
+            case 'returns':
+                data['returns'] = data['close'].pct_change()
+            case 'log_returns':
+                data['log_returns'] = np.log(data['close'] / data['close'].shift(1))
+            case 'ma_10':
+                data['ma_10'] = ta.trend.sma_indicator(data['close'], window=10)
+            case 'ma_30':
+                data['ma_30'] = ta.trend.sma_indicator(data['close'], window=30)
+            case 'rsi':
+                data['rsi'] = ta.momentum.rsi(data['close'], window=14)
+            case 'bb_high':
+                data['bb_high'] = ta.volatility.bollinger_hband(data['close'])
+            case 'bb_mid':
+                data['bb_mid'] = ta.volatility.bollinger_mavg(data['close'])
+            case 'bb_low':
+                data['bb_low'] = ta.volatility.bollinger_lband(data['close'])
+            case 'macd':
+                data['macd'] = ta.trend.macd_diff(data['close'])
+            case 'atr':
+                data['atr'] = ta.volatility.average_true_range(data['high'], data['low'], data['close'])
+            case 'volume':
+                pass  # Volume is already in the data
+            case 'obv':
+                data['obv'] = ta.volume.on_balance_volume(data['close'], data['volume'])
+            case 'cci':
+                data['cci'] = ta.trend.cci(data['high'], data['low'], data['close'])
+            case 'adx':
+                data['adx'] = ta.trend.adx(data['high'], data['low'], data['close'])
+            case 'sentiment':
+                data['sentiment'] = np.random.randn(len(data))
 
     # Fetch market data using SPY as sp500 proxy
+    # Show loader
     market_request_params = StockBarsRequest(
         symbol_or_symbols="SPY",
         timeframe=TimeFrame.Minute,
         start=start_date,
         end=end_date
     )
-    market_bars = stock_client.get_stock_bars(market_request_params)
+    with tqdm(total=1, desc=f'[{datetime.now().strftime("%H:%M:%S")}] Fetching market data {symbol}') as pbar:
+        market_bars = stock_client.get_stock_bars(market_request_params)
+        pbar.update(1)
     market_data = market_bars.df.reset_index().set_index('timestamp')
     data['market_returns'] = market_data['close'].pct_change().reindex(data.index).fillna(0)
 
@@ -122,7 +151,6 @@ def get_data(symbol, start_date, end_date):
     data = data.dropna()
 
     # Select features
-    features = ['returns', 'log_returns', 'ma_10', 'ma_30', 'rsi', 'bb_high', 'bb_mid', 'bb_low', 'macd', 'atr', 'volume', 'obv', 'cci', 'adx', 'sentiment', 'market_returns']
     X = data[features].values
     y = data['returns'].values
 
@@ -151,8 +179,7 @@ def train_model(X, y, seq_length, model_params, lr, num_epochs, model_type='lstm
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model.to(device)
 
-    pbar = tqdm(range(num_epochs), desc=f"Training {model_type.upper()} model")
-
+    pbar = tqdm(range(num_epochs), desc=f'[{datetime.now().strftime("%H:%M:%S")}] Training {model_type.upper()} model')
     for epoch in pbar:
         model.train()
         total_loss = 0
@@ -176,10 +203,13 @@ def trade(model, data, scaler, symbol, initial_balance=100000):
     position = 0
     returns = []
 
+
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    pbar = tqdm(range(len(data) - 60), desc=f'[{datetime.now().strftime("%H:%M:%S")}] Trading {symbol}')
 
     with torch.no_grad():
-        for i in range(len(data) - 60):
+        for i in pbar:
+        #for i in range(len(data) - 60):
             seq = torch.FloatTensor(data[i:i+60]).unsqueeze(0).to(device)
             prediction = model(seq).item()
 
@@ -210,7 +240,27 @@ def trade(model, data, scaler, symbol, initial_balance=100000):
             total_value = balance + position * data[i+60, 0]
             returns.append((total_value / initial_balance) - 1)
 
+            pbar.set_postfix({'Returns': f'{returns[-1]:.2%}'})
+
     return returns
+
+# Save model to disc
+def save_model(model, model_type, symbol):
+    print(f"Saving model: {symbol}_{model_type}_model.pth")
+
+    torch.save(model.state_dict(), f"{symbol}_{model_type}_model.pth")
+
+# Function to load model
+def load_model(model_type, symbol, model_params):
+    if model_type == 'lstm':
+        model = LSTMModel(model_params['input_dim'], **model_params)
+    elif model_type == 'transformer':
+        model = TransformerModel(model_params['input_dim'], **model_params)
+    else:
+        raise ValueError("Invalid model type")
+
+    model.load_state_dict(torch.load(f"{symbol}_{model_type}_model.pth"))
+    return model
 
 # Ensemble prediction
 def ensemble_predict(lstm_model, transformer_model, data):
@@ -229,6 +279,9 @@ def process_stock(symbol, start_date, end_date, seq_length, lstm_params, transfo
     lstm_model = train_model(X, y, seq_length, lstm_params, lr, num_epochs, 'lstm')
     transformer_model = train_model(X, y, seq_length, transformer_params, lr, num_epochs, 'transformer')
 
+    save_model(lstm_model, 'lstm', symbol)
+    save_model(transformer_model, 'transformer', symbol)
+
     returns = trade(lstm_model, np.column_stack((y.reshape(-1, 1), X)), scaler, symbol)
 
     total_return = returns[-1]
@@ -238,7 +291,6 @@ def process_stock(symbol, start_date, end_date, seq_length, lstm_params, transfo
 
 # Main execution
 if __name__ == "__main__":
-
     #symbols = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META']  # Stocks
     symbols = ['AAPL']  # Stocks TESTING
 
