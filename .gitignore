@@ -1,3 +1,4 @@
 .venv
 .env
 .pyrightconfig.json
+pyrightconfig.json
