@@ -24,6 +24,7 @@ from data_processing import get_data
 from dataset import StockDataset
 from models.lstm_model import LSTMModel
 from models.transformer_model import TransformerModel
+from config import SYMBOLS
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -151,9 +152,6 @@ if __name__ == "__main__":
     # Set start method to spawn
     multiprocessing.set_start_method('spawn', force=True)
 
-    #symbols = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'META']  # Stocks
-    symbols = ['AAPL']  # Stocks TESTING
-
     end_date = datetime.now() - timedelta(days=1)  # Use yesterday's date
     start_date = end_date - timedelta(days=365)  # Use one year of data
 
@@ -164,7 +162,7 @@ if __name__ == "__main__":
     num_epochs = 100
 
     # Parallel processing
-    with multiprocessing.Pool(processes=1) as pool:  # Use only 1 process for testing
+    with multiprocessing.Pool() as pool:  # Use only 1 process for testing
         pool.map(partial(process_stock, start_date=start_date, end_date=end_date,
                                    seq_length=seq_length, lstm_params=lstm_params,
-                                   transformer_params=transformer_params, lr=lr, num_epochs=num_epochs), symbols)
+                                   transformer_params=transformer_params, lr=lr, num_epochs=num_epochs), SYMBOLS)

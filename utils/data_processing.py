@@ -79,7 +79,7 @@ def get_data(symbol, start_date, end_date):
     )
 
     # Show loader
-    with tqdm(total=1, desc=f'Fetching market data {symbol}') as pbar:
+    with tqdm(total=1, desc=f'[{datetime.now().strftime("%H:%M:%S")}] Fetching market data {symbol}') as pbar:
         bars = stock_client.get_stock_bars(request_params)
         pbar.update(1)
 
@@ -141,12 +141,12 @@ def get_data(symbol, start_date, end_date):
     data = data.dropna()
 
     # Log the first few rows of the selected features
-    logging.debug("Selected features (first 5 rows):")
-    logging.debug(data[features].head())
+    logging.info("Selected features (first 5 rows):")
+    logging.info(data[features].head())
 
     # Log the list of feature names
-    logging.debug("List of features:")
-    logging.debug(features)
+    logging.info("List of features:")
+    logging.info(features)
 
     X = data[features].values
     y = data['returns'].values

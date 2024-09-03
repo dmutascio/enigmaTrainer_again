@@ -47,7 +47,18 @@ def load_model(model_type, symbol, model_params):
         ValueError: If an invalid model type is provided.
     """
 
-    file_path = f"../trained_models/{symbol}/{symbol}_{model_type}_model.pth"
+    # Get the directory of the current script
+    current_script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Construct the path to the trained_models directory
+    trained_models_dir = os.path.join(current_script_dir, "..", "trained_models")
+
+    # Construct the full path to the model file
+    file_path = os.path.join(trained_models_dir, symbol, f"{symbol}_{model_type}_model.pth")
+
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Model file not found: {file_path}")
 
     # Determine the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -116,25 +127,25 @@ def trade(lstm_model, transformer_model, data, scaler, symbol, initial_balance=1
     Returns:
         list: List of returns for each trading day.
     """
-
-    lstm_model.eval()
-    transformer_model.eval()
-
     # Force CPU
     lstm_model = lstm_model.cpu()
     transformer_model = transformer_model.cpu()
+
+    lstm_model.eval()
+    transformer_model.eval()
 
     balance = initial_balance
     position = 0
     returns = []
 
+    #device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device("cpu")
 
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     pbar = tqdm(range(len(data) - 60), desc=f'[{datetime.now().strftime("%H:%M:%S")}] Trading {symbol}')
 
     with torch.no_grad():
         for i in pbar:
-            seq = torch.FloatTensor(data.iloc[i:i+60].values).unsqueeze(0).to(device)
+            seq = torch.FloatTensor(data[i:i+60]).unsqueeze(0).to(device)
             prediction = ensemble_inference(lstm_model, transformer_model, seq)
 
             if prediction > 0.001 and position == 0:
@@ -185,30 +196,14 @@ def process_stock(symbol, start_date, end_date, seq_length):
     try:
         X, y, scaler, data = get_data(symbol, start_date, end_date)
 
-
-        # Convert all columns to numeric, replacing non-numeric values with NaN
-        for column in data.columns:
-            data[column] = pd.to_numeric(data[column], errors='coerce')
-
-        # Drop any rows with NaN values
-        data = data.dropna()
-
-        # Recalculate X and y after cleaning the data
-        features = [col for col in data.columns if col != 'returns']
-        X = data[features].values
-        y = data['returns'].values
-
-        print(f"X shape: {X.shape}, X dtype: {X.dtype}")
-        print(f"y shape: {y.shape}, y dtype: {y.dtype}")
-
-
-
+        # add dummy dim
+        X = np.pad(X, ((0, 0), (0, 1)), mode='constant', constant_values=0)
 
         lstm_model = load_model('lstm', symbol, LSTM_PARAMS)
         transformer_model = load_model('transformer', symbol, TRANSFORMER_PARAMS)
 
         # Simulate trading using ensemble predictions
-        returns = trade(lstm_model, transformer_model, data, scaler, symbol)
+        returns = trade(lstm_model, transformer_model, X, scaler, symbol)
 
         returns_array = np.array(returns)
         total_return = returns[-1]
@@ -228,6 +223,7 @@ if __name__ == "__main__":
 
     end_date = datetime.now() - timedelta(days=1)
     start_date = end_date - timedelta(days=30)  # Use last 30 days for inference
+    #start_date = end_date - timedelta(days=30)  # Use last 30 days for inference
 
     with multiprocessing.Pool(processes=1) as pool:
         results = pool.map(partial(process_stock,
