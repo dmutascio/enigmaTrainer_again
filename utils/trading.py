@@ -22,6 +22,8 @@ from config import LSTM_PARAMS, TRANSFORMER_PARAMS, TRAINING_PARAMS, SYMBOLS
 import logging
 import dotenv
 import os
+import argparse
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 dotenv.load_dotenv()
 
@@ -179,7 +181,88 @@ def trade(lstm_model, transformer_model, data, scaler, symbol, initial_balance=1
 
     return returns
 
-def process_stock(symbol, start_date, end_date, seq_length):
+def simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model, seq_length=60, initial_balance=100000, transaction_cost=0.001):
+    """
+    Simulate trading using ensemble predictions from LSTM and Transformer models.
+    """
+    X, y, scaler, data = get_data(symbol, start_date, end_date)
+
+    balance = initial_balance
+    position = 0
+    trades = []
+    daily_returns = []
+    predictions = []
+    actual_returns = []
+
+    device = torch.device("cpu")  # Use CPU for consistency with live trading
+
+    pbar = tqdm(range(seq_length, len(X)), desc=f'[{datetime.now().strftime("%H:%M:%S")}] Simulating {symbol}')
+
+    for i in pbar:
+        seq = torch.FloatTensor(X[i-seq_length:i]).unsqueeze(0).to(device)
+
+        prediction = ensemble_inference(lstm_model, transformer_model, seq)
+
+        predictions.append(prediction)
+        actual_returns.append(y[i])
+
+        current_price = data.iloc[i]['close']
+
+        if prediction > 0.001 and position == 0:  # Buy signal
+            shares_to_buy = balance // current_price
+            cost = shares_to_buy * current_price * (1 + transaction_cost)
+            if cost <= balance:
+                position = shares_to_buy
+                balance -= cost
+                trades.append(('BUY', i, current_price, shares_to_buy, cost))
+        elif prediction < -0.001 and position > 0:  # Sell signal
+            revenue = position * current_price * (1 - transaction_cost)
+            balance += revenue
+            trades.append(('SELL', i, current_price, position, revenue))
+            position = 0
+
+        total_value = balance + position * current_price
+        daily_return = (total_value / initial_balance) - 1
+        daily_returns.append(daily_return)
+
+        pbar.set_postfix({'Returns': f'{daily_return:.2%}'})
+
+    final_balance = balance + position * data.iloc[-1]['close']
+    total_return = (final_balance / initial_balance) - 1
+    sharpe_ratio = np.mean(daily_returns) / np.std(daily_returns) * np.sqrt(252)  # Annualized
+
+    threshold = 0.001
+    y_true = [1 if ret > threshold else (0 if ret < -threshold else 2) for ret in actual_returns]
+    y_pred = [1 if pred > threshold else (0 if pred < -threshold else 2) for pred in predictions]
+
+    accuracy = accuracy_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred, average='weighted')
+    recall = recall_score(y_true, y_pred, average='weighted')
+    f1 = f1_score(y_true, y_pred, average='weighted')
+
+    results = {
+        'symbol': symbol,
+        'start_date': start_date,
+        'end_date': end_date,
+        'initial_balance': initial_balance,
+        'final_balance': final_balance,
+        'total_return': total_return,
+        'sharpe_ratio': sharpe_ratio,
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1,
+        'number_of_trades': len(trades),
+        'trades': trades,
+        'daily_returns': daily_returns,
+        'predictions': predictions,
+        'actual_returns': actual_returns
+    }
+
+    return results
+
+
+def process_stock(symbol, start_date, end_date, seq_length, simulate):
     """
     Process a single stock for trading simulation.
 
@@ -188,6 +271,8 @@ def process_stock(symbol, start_date, end_date, seq_length):
         start_date (datetime): Start date for data retrieval.
         end_date (datetime): End date for data retrieval.
         seq_length (int): Sequence length for model input.
+        live_mode (boolean): Live or simulation mode
+
 
     Returns:
         tuple: Symbol, total return, and Sharpe ratio.
@@ -202,14 +287,19 @@ def process_stock(symbol, start_date, end_date, seq_length):
         lstm_model = load_model('lstm', symbol, LSTM_PARAMS)
         transformer_model = load_model('transformer', symbol, TRANSFORMER_PARAMS)
 
-        # Simulate trading using ensemble predictions
-        returns = trade(lstm_model, transformer_model, X, scaler, symbol)
+        if not simulate:
+            # Simulate trading using ensemble predictions
+            returns = trade(lstm_model, transformer_model, X, scaler, symbol)
 
-        returns_array = np.array(returns)
-        total_return = returns[-1]
-        sharpe_ratio = returns_array.mean() / returns_array.std() * (252 ** 0.5)  # Annualized Sharpe Ratio
+            returns_array = np.array(returns)
+            total_return = returns[-1]
+            sharpe_ratio = returns_array.mean() / returns_array.std() * (252 ** 0.5)  # Annualized Sharpe Ratio
 
-        return symbol, total_return, sharpe_ratio
+            return symbol, total_return, sharpe_ratio
+
+        else:
+            results = simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model, seq_length)
+            return symbol, results
 
     except Exception as e:
         logging.error(f"Error processing {symbol}: {str(e)}")
@@ -218,6 +308,10 @@ def process_stock(symbol, start_date, end_date, seq_length):
 # Main execution
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    parser = argparse.ArgumentParser(description="Run trading simulation or live trading")
+    parser.add_argument("--simulate", default=True)
+    args = parser.parse_args()
 
     multiprocessing.set_start_method('spawn', force=True)
 
@@ -229,14 +323,27 @@ if __name__ == "__main__":
         results = pool.map(partial(process_stock,
                                    start_date=start_date,
                                    end_date=end_date,
-                                   seq_length=TRAINING_PARAMS['seq_length']),
+                                   seq_length=TRAINING_PARAMS['seq_length'],
+                                   simulate=args.simulate),
                            SYMBOLS)
 
-    for symbol, total_return, sharpe_ratio in results:
-        if total_return is not None and sharpe_ratio is not None:
-            print(f"{symbol}:")
-            print(f"Total Return: {total_return:.2%}")
-            print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+    for result in results:
+        symbol, data = result
+        if data is not None:
+            if args.mode == 'live':
+                total_return, sharpe_ratio = data
+                print(f"{symbol}:")
+                print(f"Total Return: {total_return:.2%}")
+                print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
+            elif args.mode == 'simulation':
+                print(f"\nResults for {symbol}:")
+                print(f"Total Return: {data['total_return']:.2%}")
+                print(f"Sharpe Ratio: {data['sharpe_ratio']:.2f}")
+                print(f"Accuracy: {data['accuracy']:.2f}")
+                print(f"Precision: {data['precision']:.2f}")
+                print(f"Recall: {data['recall']:.2f}")
+                print(f"F1 Score: {data['f1_score']:.2f}")
+                print(f"Number of Trades: {data['number_of_trades']}")
         else:
-            print(f"{symbol}: Error during inference")
+            print(f"{symbol}: Error during processing")
         print()
