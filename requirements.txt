@@ -6,3 +6,4 @@ alpaca-py
 ta
 python-dotenv
 tqdm
+plotext

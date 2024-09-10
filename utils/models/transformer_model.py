@@ -13,6 +13,6 @@ class TransformerModel(nn.Module):
         x = self.embedding(x)
         x = x.permute(1, 0, 2)  # (seq_len, batch, features)
         x = self.transformer_encoder(x)
-        x = x.permute(1, 0, 2)  # (batch, seq_len, features)
-        x = self.fc(x[:, -1, :])
+        x = x[-1]
+        x = self.fc(x)
         return x

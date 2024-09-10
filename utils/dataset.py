@@ -17,13 +17,16 @@ class StockDataset(Dataset):
         seq_length (int): The length of each sequence in the dataset.
     """
 
-    def __init__(self, data, seq_length):
-        self.data = torch.FloatTensor(data)
+    def __init__(self, X, y, seq_length):
+        self.X = torch.FloatTensor(X)
+        self.y = torch.FloatTensor(y)
         self.seq_length = seq_length
 
     def __len__(self):
-        return len(self.data) - self.seq_length
+        return len(self.X) - self.seq_length
 
-    def __getitem__(self, index):
-        return (self.data[index:index+self.seq_length],
-                self.data[index+self.seq_length, 0])
+    def __getitem__(self, idx):
+        return (
+            self.X[idx:idx+self.seq_length],
+            self.y[idx+self.seq_length-1]
+        )

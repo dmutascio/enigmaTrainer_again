@@ -24,6 +24,7 @@ import dotenv
 import os
 import argparse
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import plotext as plt
 
 dotenv.load_dotenv()
 
@@ -31,6 +32,35 @@ dotenv.load_dotenv()
 API_KEY = os.environ['API_KEY']
 API_SECRET = os.environ['API_SECRET']
 trading_client = TradingClient(API_KEY, API_SECRET, paper=True)
+
+def print_returns_graph(daily_returns, symbol):
+    # Convert daily returns to numpy array if it's not already
+    daily_returns = np.array(daily_returns)
+
+    # Calculate cumulative returns
+    cumulative_returns = np.cumsum(daily_returns)
+
+    # Add initial 0 and divide by 100
+    cumulative_returns = np.insert(cumulative_returns, 0, 0) / 100
+
+    # Create x-axis (days)
+    bars = list(range(len(cumulative_returns)))
+
+    # Clear any previous plot
+    plt.clear_figure()
+
+    plt.plot_size(width=60, height=15)
+
+    plt.theme('dark')
+
+    # Create the plot
+    plt.plot(bars, cumulative_returns, label="Cumulative Returns", color="green")
+    plt.title(f"Cumulative Returns for {symbol}")
+    plt.xlabel("bars")
+    plt.ylabel("Returns")
+
+    # Show the plot
+    plt.show()
 
 # Function to load model
 def load_model(model_type, symbol, model_params):
@@ -78,6 +108,7 @@ def load_model(model_type, symbol, model_params):
         raise ValueError("Invalid model type")
 
     model.load_state_dict(state_dict)
+    model.eval()  # Set the model to evaluation mode
     return model
 
 def inference(model, seq):
@@ -181,11 +212,10 @@ def trade(lstm_model, transformer_model, data, scaler, symbol, initial_balance=1
 
     return returns
 
-def simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model, seq_length=60, initial_balance=100000, transaction_cost=0.001):
+def simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model, seq_length, X, y, scaler, data, initial_balance=100000, transaction_cost=0.001):
     """
     Simulate trading using ensemble predictions from LSTM and Transformer models.
     """
-    X, y, scaler, data = get_data(symbol, start_date, end_date)
 
     balance = initial_balance
     position = 0
@@ -194,7 +224,9 @@ def simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model
     predictions = []
     actual_returns = []
 
-    device = torch.device("cpu")  # Use CPU for consistency with live trading
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    lstm_model.to(device)
+    transformer_model.to(device)
 
     pbar = tqdm(range(seq_length, len(X)), desc=f'[{datetime.now().strftime("%H:%M:%S")}] Simulating {symbol}')
 
@@ -281,29 +313,22 @@ def process_stock(symbol, start_date, end_date, seq_length, simulate):
     try:
         X, y, scaler, data = get_data(symbol, start_date, end_date)
 
-        # add dummy dim
-        X = np.pad(X, ((0, 0), (0, 1)), mode='constant', constant_values=0)
-
         lstm_model = load_model('lstm', symbol, LSTM_PARAMS)
         transformer_model = load_model('transformer', symbol, TRANSFORMER_PARAMS)
 
-        if not simulate:
-            # Simulate trading using ensemble predictions
-            returns = trade(lstm_model, transformer_model, X, scaler, symbol)
-
-            returns_array = np.array(returns)
-            total_return = returns[-1]
-            sharpe_ratio = returns_array.mean() / returns_array.std() * (252 ** 0.5)  # Annualized Sharpe Ratio
-
-            return symbol, total_return, sharpe_ratio
+        if simulate:
+            # Perform live trading
+            results = simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model, seq_length, X, y, scaler, data)
 
         else:
-            results = simulate_trading(symbol, start_date, end_date, lstm_model, transformer_model, seq_length)
-            return symbol, results
+            # Simulate
+            results = trade(lstm_model, transformer_model, X, scaler, symbol)
+
+        return symbol, results
 
     except Exception as e:
         logging.error(f"Error processing {symbol}: {str(e)}")
-        return symbol, None, None
+        return symbol, None
 
 # Main execution
 if __name__ == "__main__":
@@ -316,10 +341,11 @@ if __name__ == "__main__":
     multiprocessing.set_start_method('spawn', force=True)
 
     end_date = datetime.now() - timedelta(days=1)
-    start_date = end_date - timedelta(days=30)  # Use last 30 days for inference
+    start_date = end_date - timedelta(days=7)  # Use last 30 days for inference
     #start_date = end_date - timedelta(days=30)  # Use last 30 days for inference
 
-    with multiprocessing.Pool(processes=1) as pool:
+    # Parallel processing
+    with multiprocessing.Pool() as pool:
         results = pool.map(partial(process_stock,
                                    start_date=start_date,
                                    end_date=end_date,
@@ -328,22 +354,19 @@ if __name__ == "__main__":
                            SYMBOLS)
 
     for result in results:
-        symbol, data = result
+        symbol, data = result # type: ignore
         if data is not None:
-            if args.mode == 'live':
-                total_return, sharpe_ratio = data
-                print(f"{symbol}:")
-                print(f"Total Return: {total_return:.2%}")
-                print(f"Sharpe Ratio: {sharpe_ratio:.2f}")
-            elif args.mode == 'simulation':
-                print(f"\nResults for {symbol}:")
-                print(f"Total Return: {data['total_return']:.2%}")
-                print(f"Sharpe Ratio: {data['sharpe_ratio']:.2f}")
-                print(f"Accuracy: {data['accuracy']:.2f}")
-                print(f"Precision: {data['precision']:.2f}")
-                print(f"Recall: {data['recall']:.2f}")
-                print(f"F1 Score: {data['f1_score']:.2f}")
-                print(f"Number of Trades: {data['number_of_trades']}")
+            print(f"\nResults for {symbol}:")
+            print(f"Total Return: {data['total_return']:.2%}") # type: ignore
+            print(f"Sharpe Ratio: {data['sharpe_ratio']:.2f}") # type: ignore
+            print(f"Accuracy: {data['accuracy']:.2f}") # type: ignore
+            print(f"Precision: {data['precision']:.2f}") # type: ignore
+            print(f"Recall: {data['recall']:.2f}") # type: ignore
+            print(f"F1 Score: {data['f1_score']:.2f}") # type: ignore
+            print(f"Number of Trades: {data['number_of_trades']}") # type: ignore
+
+            # Print the graph
+            print_returns_graph(data['daily_returns'], symbol) # type: ignore
         else:
             print(f"{symbol}: Error during processing")
         print()
