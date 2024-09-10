@@ -1,0 +1,11 @@
+{
+    "model_type": "lstm",
+    "symbol": "AAPL",
+    "params": {
+        "hidden_dim": 64,
+        "lr": 0.001,
+        "num_epochs": 50,
+        "num_layers": 1
+    },
+    "timestamp": "20240909_230552"
+}

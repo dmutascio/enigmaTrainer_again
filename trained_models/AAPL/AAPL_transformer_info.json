@@ -1,0 +1,12 @@
+{
+    "model_type": "transformer",
+    "symbol": "AAPL",
+    "params": {
+        "d_model": 64,
+        "lr": 0.001,
+        "nhead": 4,
+        "num_epochs": 50,
+        "num_layers": 1
+    },
+    "timestamp": "20240909_230656"
+}

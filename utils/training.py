@@ -212,7 +212,7 @@ def save_model(model, model_type, symbol, params):
     Save the trained model to disk.
     """
 
-    directory = f"../trained_models/{symbol}"
+    directory = f"./trained_models/{symbol}"
     if not os.path.exists(directory):
         os.makedirs(directory)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
