@@ -2,10 +2,10 @@
     "model_type": "lstm",
     "symbol": "AAPL",
     "params": {
-        "hidden_dim": 64,
-        "lr": 0.001,
-        "num_epochs": 50,
-        "num_layers": 1
+        "hidden_dim": 128,
+        "lr": 0.0001,
+        "num_epochs": 100,
+        "num_layers": 3
     },
-    "timestamp": "20240909_230552"
+    "timestamp": "20240916_041345"
 }

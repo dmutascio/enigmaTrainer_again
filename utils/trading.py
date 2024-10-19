@@ -341,7 +341,7 @@ if __name__ == "__main__":
     multiprocessing.set_start_method('spawn', force=True)
 
     end_date = datetime.now() - timedelta(days=1)
-    start_date = end_date - timedelta(days=7)  # Use last 30 days for inference
+    start_date = end_date - timedelta(days=25)  # Use last 30 days for inference
     #start_date = end_date - timedelta(days=30)  # Use last 30 days for inference
 
     # Parallel processing

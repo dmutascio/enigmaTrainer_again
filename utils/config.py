@@ -12,7 +12,7 @@ LSTM_PARAMS = {
 }
 
 TRANSFORMER_PARAMS = {
-    'd_model': 128,
+    'd_model': 64,
     'nhead': 8,
     'num_layers': 3,
     'output_dim': 1

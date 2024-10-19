@@ -142,27 +142,27 @@ def plot_loss_curves(train_losses, val_losses, model_type):
 def hyperparameter_tuning(X, y, seq_length, model_type, device):
     if model_type == 'lstm':
         param_grid = {
-            #'hidden_dim': [64, 128, 256],
-            'hidden_dim': [64],
-            #'num_layers': [1, 2, 3],
-            'num_layers': [1],
-            #'lr': [0.001, 0.0001],
-            'lr': [0.001],
-            #'num_epochs': [50, 100, 200]
-            'num_epochs': [50]
+            'hidden_dim': [64, 128, 256],
+            #'hidden_dim': [64],
+            'num_layers': [1, 2, 3],
+            #'num_layers': [1],
+            'lr': [0.001, 0.0001],
+            #'lr': [0.001],
+            'num_epochs': [50, 100, 200]
+            #'num_epochs': [50]
         }
     elif model_type == 'transformer':
         param_grid = {
-            #'d_model': [64, 128, 256],
-            'd_model': [64],
-            #'nhead': [4, 8],
-            'nhead': [4],
-            #'num_layers': [1, 2, 3],
-            'num_layers': [1],
-            #'lr': [0.001, 0.0001],
-            'lr': [0.001],
-            #'num_epochs': [50, 100, 200]
-            'num_epochs': [50]
+            'd_model': [64, 128, 256],
+            #'d_model': [64],
+            'nhead': [4, 8],
+            #'nhead': [4],
+            'num_layers': [1, 2, 3],
+            #'num_layers': [1],
+            'lr': [0.001, 0.0001],
+            #'lr': [0.001],
+            'num_epochs': [50, 100, 200]
+            #'num_epochs': [50]
         }
     else:
         raise ValueError(f"Invalid model type: {model_type}")
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     multiprocessing.set_start_method('spawn', force=True)
 
     end_date = datetime.now() - timedelta(days=1)  # Use yesterday's date
-    start_date = end_date - timedelta(days=10)  # Use one year of data
+    start_date = end_date - timedelta(days=365)  # Use one year of data
 
     seq_length = 60
 

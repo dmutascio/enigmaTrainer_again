@@ -4,9 +4,9 @@
     "params": {
         "d_model": 64,
         "lr": 0.001,
-        "nhead": 4,
-        "num_epochs": 50,
-        "num_layers": 1
+        "nhead": 8,
+        "num_epochs": 100,
+        "num_layers": 3
     },
-    "timestamp": "20240909_230656"
+    "timestamp": "20240916_134525"
 }
